@@ -5,8 +5,13 @@
 #define _UNICODE
 #endif
 #include <windows.h>
-
+#include <new>
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+struct StateInfo {
+    int state;
+    void* anything;
+};
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int nCmdShow)
 {
@@ -22,7 +27,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int nCmdShow
     RegisterClass(&wc);
 
     // Create the window.
-
+    StateInfo* pStateInf = new (std::nothrow)StateInfo;
+    if (pStateInf == NULL) {
+        return 0;
+    }
     HWND hwnd = CreateWindowEx(
         0,                              // Optional window styles.
         CLASS_NAME,                     // Window class
@@ -35,7 +43,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int nCmdShow
         NULL,       // Parent window    
         NULL,       // Menu
         hInstance,  // Instance handle
-        NULL        // Additional application data
+        pStateInf        // Additional application data -> lparam->CreateStruct->lpCreateParams
     );
 
     if (hwnd == NULL)
@@ -57,10 +65,33 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int nCmdShow
     return 0;
 }
 
+inline StateInfo* GetAppState(HWND hwnd)
+{
+    //cast GWLP_USERDATA LONG_PTR to StateInfo*, so you can handle it with your struct/class
+    LONG_PTR ptr = GetWindowLongPtr(hwnd, GWLP_USERDATA);
+    StateInfo* pState = reinterpret_cast<StateInfo*>(ptr);
+    return pState;
+}
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    StateInfo* pState;
+
+    if (uMsg == WM_CREATE) {
+        //get the additional Info from lParam
+        CREATESTRUCT* pCs = reinterpret_cast<CREATESTRUCT*> (lParam);
+        pState = reinterpret_cast<StateInfo*> (pCs->lpCreateParams);
+        //put StateInfo pointer into GWLP_USERDATA
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)pState);
+    }
+    else {
+        pState = GetAppState(hwnd);
+    }
+
     switch (uMsg)
     {
+    case WM_CREATE:
+
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
@@ -72,10 +103,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 
 
-        FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
+        FillRect(hdc, &ps.rcPaint, CreateSolidBrush(RGB(180,180,180)));
 
         EndPaint(hwnd, &ps);
     }
+    break;
+    case WM_CLOSE:
+        if (MessageBox(hwnd, L"Really quit?", L"My Application", MB_OKCANCEL) == IDOK) {
+            DestroyWindow(hwnd);
+        }
     return 0;
 
     }
